@@ -5,7 +5,7 @@ decorator==4.4.0
 idna==2.7
 imageio==2.5.0
 networkx==2.3
-numpy==1.17.0
+numpy==1.22.0
 Pillow==6.1.0
 PyWavelets==1.0.3
 requests==2.20.0
