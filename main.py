@@ -1,3 +1,4 @@
+import datetime
 import pandas as pd
 import numpy as np
 import gym
@@ -15,8 +16,8 @@ log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(line
 logFile = 'log/trading_bot.log'
 
 # Use RotatingFileHandler to handle log rotation
-my_handler = RotatingFileHandler(logFile, mode='a', maxBytes=1*1024*1024,
-                                 backupCount=5, encoding=None, delay=0)
+my_handler = RotatingFileHandler(logFile, mode='a', maxBytes=10*1024*1024,
+                                 backupCount=10, encoding=None, delay=0)
 
 my_handler.setFormatter(log_formatter)
 my_handler.setLevel(logging.INFO)
@@ -176,7 +177,8 @@ class ForexEnv(gym.Env):
 
         # Log or return the custom metrics
         logging.info(f"Step: {self.current_step}, Action: {action}, Reward: {immediate_reward + delayed_reward + delayed_hedge_reward}, Total Portfolio Value: {self.portfolio_value}, Sharpe Ratio: {sharpe_ratio}, Drawdown: {drawdown}")
-        
+        if drawdown > 0.6 or self.portfolio_value < 10000 * 0.5:
+            self.done = True
         return obs, immediate_reward + delayed_reward + delayed_hedge_reward, self.done,{ "Total Portfolio Value": self.portfolio_value, 
                                                                                          "sharpe_ratio": sharpe_ratio,
                                                                                            "drawdown": drawdown
@@ -185,29 +187,84 @@ class ForexEnv(gym.Env):
         
 
 env = ForexEnv(forex_data)
-
+# Initialize counter and other variables
+achieved_goal_count = 0
+final_portfolio_value_goal = 200000  # Replace with your actual goal value
+current_episode = 0
+max_episodes = 1000  # Maximum number of episodes to run
+best_portfolio_value = 0  # Initialize the best_portfolio_value to 0
 model = DQN('MlpPolicy', env, verbose=1, learning_rate=1e-3, buffer_size=50000, exploration_fraction=0.1, 
             target_update_interval=1000, tensorboard_log="tensorboard/")
-model.learn(total_timesteps=10000,progress_bar=True)
-
-obs = env.reset()
-done = False
-total_reward = 0
-while not done:
-    action, _ = model.predict(obs)
-    dict_value= {}
-    obs, reward, done, dict_value   = env.step(action)
-    print(dict_value)
-    total_reward += reward
+# -------------------- old code start ------------
+# model.learn(total_timesteps=10000,progress_bar=True,)
+# model.save(f'model/fx-model_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.pkl')
+# obs = env.reset()
+# done = False
+# total_reward = 0
+# init_portfolio_value = 0
+# print(f'init_portfolio_value: {init_portfolio_value}')
+# final_portfolio_value = 0
+# while not done:
+#     action, _ = model.predict(obs)
+#     dict_value= {}
+#     obs, reward, done, dict_value   = env.step(action)
+#     if init_portfolio_value == 0:
+#         init_portfolio_value = dict_value['Total Portfolio Value']
+    
+#     # print(dict_value)
+#     total_reward += reward
     
 
-    if done:
-        logging.info("Episode done!")
-        obs = env.reset()
-    else:
-            # logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}")
-        logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}, Total Portfolio Value:{dict_value['Total Portfolio Value']},  Sharpe Ratio: {dict_value['sharpe_ratio']}, Drawdown: {dict_value['drawdown']}")
+#     if done:
+#         logging.info("Episode done!")
+#         obs = env.reset()
+#         print(f'init_portfolio_value: {init_portfolio_value}')
+#         print(f'final_portfolio_value: {final_portfolio_value}')
+#     else:
+#             # logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}")
+#         logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}, Total Portfolio Value:{dict_value['Total Portfolio Value']},  Sharpe Ratio: {dict_value['sharpe_ratio']}, Drawdown: {dict_value['drawdown']}")
+#         final_portfolio_value = dict_value['Total Portfolio Value']
+# ------------old code end------------
+while achieved_goal_count < 3 and current_episode < max_episodes:
+    obs = env.reset()
+    done = False
+    
+    while not done:
+        action, _ = model.predict(obs)
+        obs, reward, done, dict_value   = env.step(action)
+        
+        # Check final portfolio value
+        if done:
+            final_portfolio_value = env.portfolio_value  # Replace with actual code to get final portfolio value
+            if final_portfolio_value >= final_portfolio_value_goal:
+                achieved_goal_count += 1
+                print(f"Goal achieved {achieved_goal_count} times!")
+                
+                # Save the model if this is the best portfolio value so far
+                if final_portfolio_value > best_portfolio_value:
+                    best_portfolio_value = final_portfolio_value
+                    # model.save("model/best_model")
+                    model.save(f'model/fx-model_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.pkl')
+                    print(f"Best model saved with portfolio value {best_portfolio_value}")
+            else:
+                # Reset counter if you want to achieve the goal consecutively
+                # Remove this line if you want to achieve the goal 3 times irrespective of order
+                achieved_goal_count = 0
+        else:
+            logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Portfolio Value:{dict_value['Total Portfolio Value']},  Sharpe Ratio: {dict_value['sharpe_ratio']}, Drawdown: {dict_value['drawdown']}")
+                # final_portfolio_value = dict_value['Total Portfolio Value']
 
+    # Increment episode counter
+    current_episode += 1
+    
+    # Retrain the model every 10 episodes (or any other number that makes sense for your application)
+    if current_episode % 10 == 0:
+        model.learn(total_timesteps=10000,progress_bar=True,)
+        print("Model retrained.")
+        
+    # Check for max episodes
+    if current_episode >= max_episodes:
+        print("Maximum episodes reached. Stopping the loop.")
 
 
 
