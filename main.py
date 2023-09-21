@@ -65,6 +65,17 @@ class ForexEnv(gym.Env):
         self.current_step = 0
         self.done = False
         self.total_profit = 0
+        self.position_open_price = 0
+        self.position = None  # Can be 'long', 'short', or None
+        self.hedge_position = None  # Can be 'long_hedge', 'short_hedge' or None
+        self.hedge_position_open_price = 0
+        self.returns = []  # To keep track of returns for calculating Sharpe ratio
+        # self.max_portfolio_value = 0  # To keep track of the highest portfolio value for calculating drawdown
+        self.portfolio_value = 10000  # Initial portfolio value
+        self.leverage = 100
+        self.risk_per_trade = 0.02  # 2% risk per trade
+        self.returns = []
+        self.max_portfolio_value = self.portfolio_value  # Start at initial portfolio value
         return self._next_observation()
     
     def _next_observation(self):
@@ -166,37 +177,17 @@ class ForexEnv(gym.Env):
         # Log or return the custom metrics
         logging.info(f"Step: {self.current_step}, Action: {action}, Reward: {immediate_reward + delayed_reward + delayed_hedge_reward}, Total Portfolio Value: {self.portfolio_value}, Sharpe Ratio: {sharpe_ratio}, Drawdown: {drawdown}")
         
-        return obs, immediate_reward + delayed_reward + delayed_hedge_reward, self.done, {"sharpe_ratio": sharpe_ratio, "drawdown": drawdown}
+        return obs, immediate_reward + delayed_reward + delayed_hedge_reward, self.done,{ "Total Portfolio Value": self.portfolio_value, 
+                                                                                         "sharpe_ratio": sharpe_ratio,
+                                                                                           "drawdown": drawdown
+                                                                                           }
 
-        # self.portfolio_value += immediate_reward + delayed_reward + delayed_hedge_reward  # Update portfolio value
-        # self.returns.append(immediate_reward + delayed_reward + delayed_hedge_reward)  # Keep track of returns
-        # # Update max portfolio value for drawdown calculation
-        # self.max_portfolio_value = max(self.max_portfolio_value, self.portfolio_value)
         
-        # # Calculate Sharpe ratio
-        # sharpe_ratio = 0.0
-        # if len(self.returns) > 1:
-        #     sharpe_ratio = np.mean(self.returns) / np.std(self.returns)
-        # else:
-        #     sharpe_ratio = 0.0
-        
-        # # Calculate Drawdown
-        # drawdown = (self.max_portfolio_value - self.portfolio_value) / self.max_portfolio_value
-        
-        # # Log the custom metrics
-        # logging.info(f"Step: {self.current_step}, Action: {action}, Reward: {immediate_reward + delayed_hedge_reward + delayed_reward}, Total Portfolio Value: {self.portfolio_value}, Sharpe Ratio: {sharpe_ratio}, Drawdown: {drawdown}")
-
-        # # ... (existing code for delayed_reward)
-        
-        # return obs, immediate_reward + delayed_hedge_reward + delayed_reward, self.done, {"sharpe_ratio": sharpe_ratio, "drawdown": drawdown}
-        # # return obs, immediate_reward + delayed_reward + delayed_hedge_reward, self.done, {}
-
-
 
 env = ForexEnv(forex_data)
 
 model = DQN('MlpPolicy', env, verbose=1, learning_rate=1e-3, buffer_size=50000, exploration_fraction=0.1, 
-            target_update_interval=1000, tensorboard_log="./tensorboard/")
+            target_update_interval=1000, tensorboard_log="tensorboard/")
 model.learn(total_timesteps=10000,progress_bar=True)
 
 obs = env.reset()
@@ -209,11 +200,14 @@ while not done:
     print(dict_value)
     total_reward += reward
     
-    # logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}")
-    logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}, Sharpe Ratio: {dict_value['sharpe_ratio']}, Drawdown: {dict_value['drawdown']}")
 
     if done:
         logging.info("Episode done!")
         obs = env.reset()
+    else:
+            # logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}")
+        logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}, Total Portfolio Value:{dict_value['Total Portfolio Value']},  Sharpe Ratio: {dict_value['sharpe_ratio']}, Drawdown: {dict_value['drawdown']}")
+
+
 
 
