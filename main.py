@@ -169,8 +169,14 @@ class ForexEnv(gym.Env):
         
         # Calculate Sharpe ratio (assuming a risk-free rate of 0 for simplicity)
         sharpe_ratio = 0.0
-        if len(self.returns) > 1:
-            sharpe_ratio = np.mean(self.returns) / np.std(self.returns)
+        try:
+            if np.std(self.returns) != 0:
+                sharpe_ratio = np.mean(self.returns) / np.std(self.returns)
+            else:
+                sharpe_ratio = 0.0
+        except Exception as e:
+            print(f"An exception occurred: {e}")
+            sharpe_ratio = 0.0
         
         # Calculate Drawdown
         drawdown = (self.max_portfolio_value - self.portfolio_value) / self.max_portfolio_value
@@ -189,12 +195,13 @@ class ForexEnv(gym.Env):
 env = ForexEnv(forex_data)
 # Initialize counter and other variables
 achieved_goal_count = 0
-final_portfolio_value_goal = 200000  # Replace with your actual goal value
+final_portfolio_value_goal = 50000  # Replace with your actual goal value
 current_episode = 0
 max_episodes = 1000  # Maximum number of episodes to run
 best_portfolio_value = 0  # Initialize the best_portfolio_value to 0
 model = DQN('MlpPolicy', env, verbose=1, learning_rate=1e-3, buffer_size=50000, exploration_fraction=0.1, 
             target_update_interval=1000, tensorboard_log="tensorboard/")
+model.learn(total_timesteps=10000,progress_bar=True,)
 # -------------------- old code start ------------
 # model.learn(total_timesteps=10000,progress_bar=True,)
 # model.save(f'model/fx-model_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.pkl')
@@ -225,34 +232,44 @@ model = DQN('MlpPolicy', env, verbose=1, learning_rate=1e-3, buffer_size=50000, 
 #         logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Reward: {total_reward}, Total Portfolio Value:{dict_value['Total Portfolio Value']},  Sharpe Ratio: {dict_value['sharpe_ratio']}, Drawdown: {dict_value['drawdown']}")
 #         final_portfolio_value = dict_value['Total Portfolio Value']
 # ------------old code end------------
+portfolio_runs = []
 while achieved_goal_count < 3 and current_episode < max_episodes:
     obs = env.reset()
     done = False
-    
+    init_portfolio_value = env.portfolio_value
+    print(f'init_portfolio_value: {init_portfolio_value}')
+    final_portfolio_value = 0
+        # Retrain the model every 10 episodes (or any other number that makes sense for your application)
+
     while not done:
         action, _ = model.predict(obs)
         obs, reward, done, dict_value   = env.step(action)
+
         
         # Check final portfolio value
         if done:
-            final_portfolio_value = env.portfolio_value  # Replace with actual code to get final portfolio value
+            print(f'init_portfolio_value: {init_portfolio_value}')
+            print(f'final_portfolio_value: {final_portfolio_value}')
+            model_name = f'model/fx-model_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.pkl'
+            model.save(model_name)
+            portfolio_runs.append((init_portfolio_value, final_portfolio_value, model_name))
+              # Replace with actual code to get final portfolio value
             if final_portfolio_value >= final_portfolio_value_goal:
                 achieved_goal_count += 1
                 print(f"Goal achieved {achieved_goal_count} times!")
-                
                 # Save the model if this is the best portfolio value so far
                 if final_portfolio_value > best_portfolio_value:
                     best_portfolio_value = final_portfolio_value
                     # model.save("model/best_model")
-                    model.save(f'model/fx-model_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.pkl')
+                    model.save(f'Best Model')
                     print(f"Best model saved with portfolio value {best_portfolio_value}")
-            else:
-                # Reset counter if you want to achieve the goal consecutively
-                # Remove this line if you want to achieve the goal 3 times irrespective of order
-                achieved_goal_count = 0
+            # else:
+            #     # Reset counter if you want to achieve the goal consecutively
+            #     # Remove this line if you want to achieve the goal 3 times irrespective of order
+            #     achieved_goal_count = 0
         else:
             logging.info(f"Step: {env.current_step}, Action: {action}, Reward: {reward}, Total Portfolio Value:{dict_value['Total Portfolio Value']},  Sharpe Ratio: {dict_value['sharpe_ratio']}, Drawdown: {dict_value['drawdown']}")
-                # final_portfolio_value = dict_value['Total Portfolio Value']
+            final_portfolio_value = dict_value['Total Portfolio Value']
 
     # Increment episode counter
     current_episode += 1
@@ -266,5 +283,6 @@ while achieved_goal_count < 3 and current_episode < max_episodes:
     if current_episode >= max_episodes:
         print("Maximum episodes reached. Stopping the loop.")
 
-
-
+    df_pr = pd.DataFrame(portfolio_runs, columns=['init_portfolio_value', 'final_portfolio_value','model_name'])
+    # print(f'portfolio_runs: {portfolio_runs}')
+    df_pr.to_csv('portfolio_runs.csv', index=False)
