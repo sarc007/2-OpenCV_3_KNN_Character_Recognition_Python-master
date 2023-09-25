@@ -6,7 +6,7 @@ def live_trade(model, env):
     obs = env.reset()
     while True:
         action, _ = model.predict(obs)
-        obs, reward, done, info = env.step(action)
+        obs, reward, done, info = env.step(action
         # Execute trading orders based on action and update environment
         # ...
 
