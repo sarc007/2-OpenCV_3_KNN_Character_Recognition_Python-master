@@ -10,5 +10,5 @@ Pillow==6.1.0
 PyWavelets==1.0.3
 requests==2.31.0
 scikit-image==0.15.0
-urllib3==1.26.5
+urllib3==1.26.18
 
